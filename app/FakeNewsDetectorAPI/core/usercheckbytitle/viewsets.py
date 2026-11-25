@@ -1,25 +1,29 @@
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.response import Response
+
+from core.model import ModelUnavailableError, predict_headline
 from .serializers import UserCheckSerializer
-from core.model import load_models
+
 
 class UserCheckViewSet(viewsets.ViewSet):
-    """Viewset to handle user checking other news."""
+    """Viewset to analyze user-submitted news headlines/text with the ML classifier."""
+
     http_method_names = ('post', )
     serializer_class = UserCheckSerializer
-    nb_model, vect_model = load_models()
 
     def create(self, request):
-        """Get's news from user and returns predicted value."""
+        """Validate input text and return classifier prediction with model scores."""
         serializer = UserCheckSerializer(data=request.data)
-        if serializer.is_valid():
-            input_data = serializer.validated_data['user_news']
-            input_data = [input_data]
-            vectorized_text = self.vect_model.transform(input_data)
-            prediction = self.nb_model.predict(vectorized_text)
-            prediction_bool = True if prediction[0] == 1 else False
-            
-            response_data = {'prediction': prediction_bool}
-            return Response(response_data)
-        else:
-            return Response(serializer.errors, status=400)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        input_data = serializer.validated_data['user_news']
+        try:
+            result = predict_headline(input_data)
+        except ModelUnavailableError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)

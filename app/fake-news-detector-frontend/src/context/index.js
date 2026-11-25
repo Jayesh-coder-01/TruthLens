@@ -1,23 +1,15 @@
-import React, { Component } from 'react';
+import React, { createContext, useState } from 'react';
 
-const MyContext = React.createContext();
+const MyContext = createContext();
 
+function MyProvider({ children }) {
+  const [latestAnalysis, setLatestAnalysis] = useState(null);
 
-class MyProvider extends Component { 
-
-    state = {
-        stage: 1
-    }
-
-    render() {
-        return (
-            <MyContext.Provider value={{
-                state: this.state
-            }}>
-                {this.props.children}
-            </MyContext.Provider>
-        )
-    }
+  return (
+    <MyContext.Provider value={{ latestAnalysis, setLatestAnalysis }}>
+      {children}
+    </MyContext.Provider>
+  );
 }
 
-export {MyContext, MyProvider}
+export { MyContext, MyProvider };

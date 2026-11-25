@@ -3,16 +3,15 @@ from .models import NewsQuizData
 
 
 class NewsQuizSerializer(serializers.ModelSerializer):
-    """Serializer for news quiz."""
+    """Serializer for news quiz prompt (withholds answer label until graded)."""
+
     class Meta:
         model = NewsQuizData
-        fields = ('id', 'news_title', 'news_description', 'label')
+        fields = ('id', 'news_title', 'news_description')
 
 
 class NewsQuizAnsweredSerializer(serializers.Serializer):
-    """Serializer for user's answer for quiz."""
-    id = serializers.IntegerField()
-    answer = serializers.BooleanField()
+    """Serializer for user's answer submission (answer=True means Real, False means Fake)."""
 
-    class Meta:
-        fields = ['id', 'answer']
+    id = serializers.IntegerField(min_value=1)
+    answer = serializers.BooleanField()

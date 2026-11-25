@@ -1,332 +1,245 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Row, Col } from 'react-bootstrap';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Button, Col, Container, Row, Spinner } from 'react-bootstrap';
+import {
+  ArrowClockwise,
+  ChatLeftText,
+  CheckCircleFill,
+  ExclamationTriangleFill,
+  JournalCheck,
+  Search,
+  XCircleFill,
+} from 'react-bootstrap-icons';
+import { Link } from 'react-router-dom';
+
+import { apiClient, extractApiError } from '../api/client';
+import Footer from './Footer';
 import Header from './header';
-import { Check2, X } from 'react-bootstrap-icons';
-import Axios from 'axios';
+
+function formatPublishedDate(isoString) {
+  if (!isoString) return 'Date unavailable';
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 function Home() {
-  document.title = 'News Guardian | Home';
-  let stage = 1;
+  document.title = 'TruthLens | News Analysis & Media Literacy';
 
   const [liveNewsData, setLiveNewsData] = useState([]);
-  const [mustSeeNews, setMustSeeNews] = useState([]);
-  const [allNews, setAllNews] = useState([]);
+  const [monitorStatus, setMonitorStatus] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const categories = ['Sport', 'Lifestyle', 'Arts', 'News'];
-
-  // Function to fetch live news data
-  const fetchLiveNewsData = () => {
-    Axios.get('http://127.0.0.1:8000/api/live/')
-      .then((response) => {
-        setLiveNewsData(response.data);
-        console.log(response.data);
-      })
-      .catch((error) => {
-        console.error('Error', error);
-      });
-    
-    Axios.get('http://127.0.0.1:8000/api/category/News/')
-    .then((response) => {
-      setMustSeeNews(response.data);
-      console.log(response.data);
-    })
-    .catch((error) => {
-      console.error('Error', error);
-    });
-
-    const fetchPromises = categories.map((category) => {
-      return Axios.get(`http://127.0.0.1:8000/api/category/${category}/`)
-        .then((response) => {
-          if (response.data.length > 0) {
-            return response.data[0]; // Return the news data
-          }
-        })
-        .catch((error) => {
-          console.error('Error', error);
-        });
-    });
-    
-    // Use Promise.all to handle all promises
-    Promise.all(fetchPromises)
-      .then((newsData) => {
-        // Filter out undefined values (failed requests)
-        const filteredNewsData = newsData.filter((data) => data !== undefined);
-        setAllNews(filteredNewsData);
-        console.log('All news fetched and added.');
-      })
-      .catch((error) => {
-        console.error('Error', error);
-      });    
-  };
-
-  // Fetch initial live news data on component mount
-  useEffect(() => {
-    fetchLiveNewsData();
-
-    const intervalId = setInterval(() => {
-      fetchLiveNewsData();
-
-    }, 10000);
-
-    return () => clearInterval(intervalId);
+  const fetchLiveData = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const [articlesRes, statusRes] = await Promise.all([
+        apiClient.get('/api/live/'),
+        apiClient.get('/api/live/status/'),
+      ]);
+      setLiveNewsData(Array.isArray(articlesRes.data) ? articlesRes.data : []);
+      setMonitorStatus(statusRes.data || null);
+    } catch (err) {
+      setErrorMessage(extractApiError(err, 'Could not load live monitoring status.'));
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  let newsData = [];
-  newsData = liveNewsData;
+  useEffect(() => {
+    fetchLiveData();
+  }, [fetchLiveData]);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    setErrorMessage('');
+    try {
+      await apiClient.post('/api/live/refresh/');
+      await fetchLiveData();
+    } catch (err) {
+      setErrorMessage(extractApiError(err, 'Unable to refresh Guardian news feed.'));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <>
-      <Header activeContainer={stage} />
-      <Container className="home-container">
-        <div className="live-news-container-header">
-          <img src={process.env.PUBLIC_URL + '/live.gif'} height={30} className="logo-image" alt="Live News" />
-        </div>
-        { liveNewsData.length >= 10 ? (
-          <Container className='new-news-container'>
-            <Row className='news-row'>
-              <Col xs={12} md={8}>
-                <Row className='nr-fkmwq'>
-                  <div className='div-oakpq'>
-                    <Col xs={6} md={4} className='cl-ksmao'>
-                      <h4 className='h-fowjs'>{liveNewsData[0].title}</h4>
-                    </Col>
-                    { liveNewsData[0].img_url === 'None' ? 
-                      null :
-                        (
-                          <Col>
-                            <img src={liveNewsData[0].img_url}/>
-                          </Col>
-                        )
-                    }
-                  </div>
-                  <div className='div-kjpql'>
-                    <div>
-                      { new Date(liveNewsData[0].publication_date).getDay()}/{new Date(liveNewsData[0].publication_date).getMonth()}/{new Date(liveNewsData[0].publication_date).getFullYear()} {new Date(liveNewsData[0].publication_date).getHours()}:{new Date(liveNewsData[0].publication_date).getMinutes() }
-                      
-                    </div>
-                    <div className='div-kpqsa'>
-
-                      { liveNewsData[0].prediction === true ? 
-                        <div className='real-news-prediction'>
-                          <Check2 /> Predicted as Real News
-                        </div> : 
-                        <div className='fake-news-prediction'>
-                          <X /> Predicted as Fake News
-                        </div>
-                      }
-
-                    </div>
-                  </div>
-                </Row>
-              </Col>
-              <Col>
-                <div>
-                  <div className='div-ipsdf'>
-                    { liveNewsData[1].img_url === 'None' ? null : (
-                      <Row>
-                        <img src={liveNewsData[1].img_url} width={500} height={200}></img>
-                        </Row>
-                    ) }
-                    <Row>
-                        <h5>{liveNewsData[1].title}</h5>
-                    </Row>
-                  </div>
-                  <div className='div-kjpql'>
-                    <div>
-                      { new Date(liveNewsData[1].publication_date).getDay()}/{new Date(liveNewsData[1].publication_date).getMonth()}/{new Date(liveNewsData[1].publication_date).getFullYear()} {new Date(liveNewsData[1].publication_date).getHours()}:{new Date(liveNewsData[1].publication_date).getMinutes() }
-                    </div>
-                    <div className='div-kpqsa'>
-                      { liveNewsData[1].prediction === true ? 
-                          <div className='real-news-prediction'>
-                            <Check2 /> Predicted as Real News
-                          </div> : 
-                          <div className='fake-news-prediction'>
-                            <X /> Predicted as Fake News
-                          </div>
-                      }
-                    </div>
-                  </div>
-                </div>
-              </Col>
-            </Row>
-            <hr />
-            
-            <Row className="news-row-2">
-              {liveNewsData.slice(2, 6).map((news, index) => (
-                <Col sm key={index}>
-                  <div className="div-olapq">
-                    {news.img_url !== 'None' && (
-                      <Row>
-                        <img src={news.img_url} width={300} height={150} alt={`News ${index + 2} Image`} />
-                      </Row>
-                    )}
-                    <Row>
-                      <h5>{news.title}</h5>
-                    </Row>
-                  </div>
-                  <div className="div-kjpql">
-                    <div>
-                      {`${new Date(news.publication_date).getDay()}/${new Date(news.publication_date).getMonth()}/${new Date(news.publication_date).getFullYear()} ${new Date(news.publication_date).getHours()}:${new Date(news.publication_date).getMinutes()}`}
-                    </div>
-                    <div className="div-kpqsa">
-                      {news.prediction ? (
-                        <div className="real-news-prediction">
-                          <Check2 /> Predicted as Real News
-                        </div>
-                      ) : (
-                        <div className="fake-news-prediction">
-                          <X /> Predicted as Fake News
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Col>
-              ))}
-            </Row>
-
-            <hr />
-
-            <Row className="news-row-3">
-              {liveNewsData.slice(6, 10).map((news, index) => (
-                <Col sm key={index}>
-                  <div className="div-olapq">
-                    {news.img_url !== 'None' && (
-                      <Row>
-                        <img src={news.img_url} width={300} height={150} alt={`News ${index + 6} Image`} />
-                      </Row>
-                    )}
-                    <Row>
-                      <h5>{news.title}</h5>
-                    </Row>
-                  </div>
-                  <div className="div-kjpql">
-                    <div>
-                      {`${new Date(news.publication_date).getDay()}/${new Date(news.publication_date).getMonth()}/${new Date(news.publication_date).getFullYear()} ${new Date(news.publication_date).getHours()}:${new Date(news.publication_date).getMinutes()}`}
-                    </div>
-                    <div className="div-kpqsa">
-                      {news.prediction ? (
-                        <div className="real-news-prediction">
-                          <Check2 /> Predicted as Real News
-                        </div>
-                      ) : (
-                        <div className="fake-news-prediction">
-                          <X /> Predicted as Fake News
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Col>
-              ))}
-            </Row>
-
-          </Container>
-          )
-          : 
-          "Not enough data to display :("
-        }
-
-        <div className='heading-title'>
-          <h3 className='heading-word'>Must See</h3>
-          <hr></hr>
-        </div>
-
-        {
-          mustSeeNews.length >= 4 ? (
-            <Container>
-              <Row>
-                {mustSeeNews.slice(0, 4).map((news, index) => (
-                  <Col sm key={index}>
-                    <div className="div-olapq">
-                      {news.img_url !== "None" ? (
-                        <Row>
-                          <img src={news.img_url} width={300} height={150} alt={`Must-See News ${index} Image`} />
-                        </Row>
-                      ) : null}
-                      <Row>
-                        <h5>{news.title}</h5>
-                      </Row>
-                    </div>
-                    <div className="div-kjpql">
-                      <div>
-                        {`${new Date(news.publication_date).getDay()}/${new Date(news.publication_date).getMonth()}/${new Date(news.publication_date).getFullYear()} ${new Date(news.publication_date).getHours()}:${new Date(news.publication_date).getMinutes()}`}
-                      </div>
-                      <div className="div-kpqsa">
-                        {news.prediction ? (
-                          <div className="real-news-prediction">
-                            <Check2 /> Predicted as Real News
-                          </div>
-                        ) : (
-                          <div className="fake-news-prediction">
-                            <X /> Predicted as Fake News
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Col>
-                ))}
-              </Row>
-            </Container>
-          ) : (
-            "Not enough data to display"
-          )
-        }
-
-        <div className='heading-title'>
-          <h3 className='heading-word'>All news</h3>
-          <hr></hr>
-        </div>
-
+      <Header activeContainer={1} />
+      <main className="tl-main">
         <Container>
-          {allNews.length >= 4 ? (
-            <Container>
-              <Row>
-                {allNews.slice(0, 4).map((news, index) => (
-                  <Col sm key={index}>
-                    <div className="div-olapq">
-                      {news.img_url !== "None" ? (
-                        <Row>
-                          <img
-                            src={news.img_url}
-                            width={300}
-                            height={150}
-                            alt={`All News ${index} Image`}
-                          />
-                        </Row>
-                      ) : null}
-                      <Row>
-                        <h5>{news.title}</h5>
-                      </Row>
-                    </div>
-                    <div className="div-kjpql">
-                      <div>
-                        {`${new Date(news.publication_date).getDay()}/${
-                          new Date(news.publication_date).getMonth()
-                        }/${new Date(news.publication_date).getFullYear()} ${new Date(
-                          news.publication_date
-                        ).getHours()}:${new Date(news.publication_date).getMinutes()}`}
-                      </div>
-                      <div className="div-kpqsa">
-                        {news.prediction ? (
-                          <div className="real-news-prediction">
-                            <Check2 /> Predicted as Real News
+          <section className="tl-hero">
+            <span className="tl-eyebrow">Media Literacy &amp; Applied NLP</span>
+            <h1 className="display-6 fw-bold mb-3">
+              Evaluate Online Headlines Critically with TruthLens
+            </h1>
+            <p className="tl-subtitle mb-4">
+              TruthLens combines a Multinomial Naive Bayes headline classifier with a Google
+              Gemini Media Literacy Assistant and an interactive news quiz so students and readers
+              can inspect model predictions without mistaking them for proof.
+            </p>
+            <div className="d-flex flex-wrap gap-2 mb-4">
+              <Link to="/checkbytitle" className="btn btn-primary tl-btn-primary">
+                <Search className="me-2" aria-hidden="true" />
+                Analyze a Headline
+              </Link>
+              <Link to="/assistant" className="btn btn-outline-primary">
+                <ChatLeftText className="me-2" aria-hidden="true" />
+                Open Media Literacy Assistant
+              </Link>
+              <Link to="/newsquiz" className="btn btn-outline-secondary">
+                <JournalCheck className="me-2" aria-hidden="true" />
+                Take News Quiz
+              </Link>
+            </div>
+            <div className="tl-notice" role="note">
+              <ExclamationTriangleFill size={18} className="flex-shrink-0 mt-1" aria-hidden="true" />
+              <div>
+                <strong>Responsible Use:</strong> An automated model prediction is not proof that a
+                claim is true or false. Always verify important information with independent and
+                primary sources.
+              </div>
+            </div>
+          </section>
+
+          <Row className="g-3 mb-4">
+            <Col md={4}>
+              <div className="tl-card h-100">
+                <h2 className="h5">1. Headline Classifier</h2>
+                <p className="small text-muted mb-0">
+                  Submit a headline to inspect the WELFake-trained <code>CountVectorizer</code> +{' '}
+                  <code>MultinomialNB</code> label (<code>0=Real</code>, <code>1=Fake</code>) and
+                  uncalibrated model score.
+                </p>
+              </div>
+            </Col>
+            <Col md={4}>
+              <div className="tl-card h-100">
+                <h2 className="h5">2. Media Literacy Assistant</h2>
+                <p className="small text-muted mb-0">
+                  Discuss any classifier result with a Gemini-powered assistant grounded in
+                  verification habits, source-checking steps, and explicit model limitations.
+                </p>
+              </div>
+            </Col>
+            <Col md={4}>
+              <div className="tl-card h-100">
+                <h2 className="h5">3. Verification Quiz</h2>
+                <p className="small text-muted mb-0">
+                  Practice spotting sensational framing vs. standard reporting on 1,000 historical
+                  items from <code>game_data.csv</code>, graded server-side.
+                </p>
+              </div>
+            </Col>
+          </Row>
+
+          <section className="tl-card">
+            <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <div>
+                <h2 className="h4 mb-1">Live Guardian Feed Monitoring (Optional)</h2>
+                <div className="small text-muted">
+                  Classifies stored headlines from The Guardian Open Platform when{' '}
+                  <code>GUARDIAN_API_KEY</code> is configured.
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline-primary"
+                size="sm"
+                onClick={handleManualRefresh}
+                disabled={isRefreshing || (monitorStatus && !monitorStatus.configured)}
+              >
+                {isRefreshing ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-1" aria-hidden="true" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <ArrowClockwise className="me-1" aria-hidden="true" />
+                    Refresh Feed
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {errorMessage && (
+              <Alert variant="danger" className="small">
+                {errorMessage}
+              </Alert>
+            )}
+
+            {isLoading ? (
+              <div className="text-center py-4 text-muted">
+                <Spinner animation="border" size="sm" className="me-2" />
+                Loading live feed status...
+              </div>
+            ) : liveNewsData.length === 0 ? (
+              <div className="tl-notice tl-notice-info">
+                <div>
+                  {monitorStatus && !monitorStatus.configured
+                    ? 'Live Guardian monitoring is disabled because GUARDIAN_API_KEY is not configured in .env. All core analysis, quiz, and assistant features remain fully available.'
+                    : 'No monitored articles are stored yet. Click Refresh Feed when GUARDIAN_API_KEY is configured.'}
+                </div>
+              </div>
+            ) : (
+              <Row className="g-3">
+                {liveNewsData.map((news) => (
+                  <Col sm={6} lg={4} key={news.id}>
+                    <article className="tl-news-card">
+                      {news.img_url && news.img_url !== 'None' && (
+                        <img
+                          src={news.img_url}
+                          alt={news.title}
+                          className="tl-news-thumb"
+                        />
+                      )}
+                      <div className="p-3 d-flex flex-column justify-content-between flex-grow-1 gap-2">
+                        <div>
+                          <div className="small text-muted mb-1">
+                            {news.section_name || news.news_category} ·{' '}
+                            {formatPublishedDate(news.publication_date)}
                           </div>
-                        ) : (
-                          <div className="fake-news-prediction">
-                            <X /> Predicted as Fake News
-                          </div>
-                        )}
+                          <h3 className="h6 mb-2">{news.title}</h3>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
+                          <span className={news.prediction ? 'tl-badge-real' : 'tl-badge-fake'}>
+                            {news.prediction ? (
+                              <CheckCircleFill aria-hidden="true" />
+                            ) : (
+                              <XCircleFill aria-hidden="true" />
+                            )}
+                            Classifier: {news.prediction ? 'Real' : 'Fake'}
+                          </span>
+                          {news.web_url && (
+                            <a
+                              href={news.web_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="small"
+                            >
+                              Source
+                            </a>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </article>
                   </Col>
                 ))}
               </Row>
-            </Container>
-          ) : (
-            "Not enough data to display"
-          )}
+            )}
+          </section>
         </Container>
-
-      </Container>
+      </main>
+      <Footer />
     </>
   );
 }
